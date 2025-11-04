@@ -107,7 +107,6 @@ def format_brl(value: float) -> str:
     try:
         v = float(value)
     except Exception:
-        # tenta limpar caso venha string tipo '1.234,56'
         try:
             v = float(str(value).replace(".", "").replace(",", "."))
         except Exception:
@@ -192,39 +191,32 @@ def parse_bens_direitos_from_text(full_text: str) -> Tuple[pd.DataFrame, Tuple[s
     df = pd.DataFrame(recs)
     if df.empty:
         return df, (ano1, ano2)
-    num_cols = [c for c in df.columns if c.startswith("situacao_")]
+    num_cols = [c for c in df.columns if c.startswith("Base_")]
     df = df.groupby(["grupo","codigo"], as_index=False)[num_cols].sum(numeric_only=True)
     return df, (ano1, ano2)
 
 def anexar_descricao(df_vals: pd.DataFrame, df_cod: pd.DataFrame) -> pd.DataFrame:
     merged = df_vals.merge(df_cod.drop_duplicates(), on=["grupo","codigo"], how="left")
-    cols = ["grupo","codigo","descricao"] + [c for c in merged.columns if c.startswith("situacao_")]
+    cols = ["grupo","codigo","descricao"] + [c for c in merged.columns if c.startswith("Base_")]
     return merged[cols]
 
 def resumir_por_grupo_codigo(df_vals: pd.DataFrame) -> pd.DataFrame:
-    num_cols = [c for c in df_vals.columns if c.startswith("situacao_")]
+    num_cols = [c for c in df_vals.columns if c.startswith("Base_")]
     return (df_vals.groupby(["grupo","codigo","descricao"], as_index=False)[num_cols]
             .sum(numeric_only=True))
 
 def add_total_row(df_num: pd.DataFrame) -> pd.DataFrame:
-    """Adiciona linha TOTAL somando colunas numéricas de situação."""
-    num_cols = [c for c in df_num.columns if c.startswith("situacao_")]
+    num_cols = [c for c in df_num.columns if c.startswith("Base_")]
     total_vals = {c: df_num[c].sum() for c in num_cols}
     total_row = {"grupo": "", "codigo": "", "descricao": "TOTAL", **total_vals}
     return pd.concat([df_num, pd.DataFrame([total_row])], ignore_index=True)
 
 def extract_declarant_info(full_text: str) -> Dict[str, Optional[str]]:
-    cpf = None
+    cpf, dob, nome = None, None, None
     m = re.search(r'CPF[:\s]*((?:\d{3}\.\d{3}\.\d{3}-\d{2})|\d{11})', full_text, re.I)
-    if m:
-        cpf = m.group(1).strip()
-
-    dob = None
+    if m: cpf = m.group(1).strip()
     m = re.search(r'(?:Data de nascimento|Nascimento|Nascido em)[:\s\-]*?(\d{2}/\d{2}/\d{4})', full_text, re.I)
-    if m:
-        dob = m.group(1).strip()
-
-    nome = None
+    if m: dob = m.group(1).strip()
     for label in [r'Nome do contribuinte', r'Nome', r'Declarante', r'Contribuinte', r'NOME']:
         m = re.search(rf'{label}\s*[:\-]?\s*([A-ZÀ-Ý][A-Za-zÀ-ÿ0-9\.\- \u00C0-\u017F,/]{{2,120}})', full_text, re.I)
         if m:
@@ -235,18 +227,12 @@ def extract_declarant_info(full_text: str) -> Dict[str, Optional[str]]:
     return {"Nome": nome, "CPF": cpf, "Data de Nascimento": dob}
 
 def make_excel_bytes(df_decl: pd.DataFrame, df_resumo_num: pd.DataFrame) -> bytes:
-    """Gera Excel com valores formatados como 'R$ ...' e linha TOTAL."""
     buf = io.BytesIO()
-
-    # ordem de colunas e linha TOTAL
-    num_cols = [c for c in df_resumo_num.columns if c.startswith("situacao_")]
+    num_cols = [c for c in df_resumo_num.columns if c.startswith("Base_")]
     ordered_cols = ["grupo", "codigo", "descricao"] + num_cols
     df_out = df_resumo_num[ordered_cols].copy()
-
-    # formata BRL como string nas colunas de valor
     for col in num_cols:
         df_out[col] = df_out[col].apply(format_brl)
-
     with pd.ExcelWriter(buf, engine="openpyxl") as xw:
         df_decl.to_excel(xw, index=False, sheet_name="declarante")
         df_out.to_excel(xw, index=False, sheet_name="resumo_por_codigo")
@@ -271,11 +257,9 @@ if uploaded is not None:
         with st.spinner("Lendo PDF..."):
             full_text = read_pdf_text(uploaded)
 
-        # Declarante
         info = extract_declarant_info(full_text)
         df_decl = pd.DataFrame([info])
 
-        # Bens e Direitos
         with st.spinner("Extraindo e somando por (Grupo, Código)..."):
             df_vals, (ano1, ano2) = parse_bens_direitos_from_text(full_text)
 
@@ -287,19 +271,12 @@ if uploaded is not None:
         else:
             df_cod = load_codigos_embutidos()
             df_tmp = anexar_descricao(df_vals, df_cod)
-
-            # NUMÉRICO para cálculos/Excel
             df_resumo_num = resumir_por_grupo_codigo(df_tmp)
-
-            # ordem fixa de colunas de valor
-            num_cols = [c for c in df_resumo_num.columns if c.startswith("situacao_")]
+            num_cols = [c for c in df_resumo_num.columns if c.startswith("Base_")]
             ordered_cols = ["grupo", "codigo", "descricao"] + num_cols
             df_resumo_num = df_resumo_num[ordered_cols]
-
-            # adiciona TOTAL (numérico)
             df_resumo_num = add_total_row(df_resumo_num)
 
-            # DISPLAY: formata BRL nas colunas de valor
             df_resumo_display = df_resumo_num.copy()
             for col in num_cols:
                 df_resumo_display[col] = df_resumo_display[col].apply(format_brl)
@@ -308,8 +285,6 @@ if uploaded is not None:
             st.subheader("Resumo por (Grupo, Código)")
             st.dataframe(df_resumo_display, use_container_width=True)
 
-
-            # Download (usa o NUMÉRICO; formata BRL dentro do Excel também)
             xlsx_bytes = make_excel_bytes(df_decl, df_resumo_num)
             st.download_button(
                 label="⬇️ Baixar Excel (declarante + resumo_por_codigo)",
@@ -322,3 +297,4 @@ if uploaded is not None:
         st.error(f"Erro ao processar o PDF: {e}")
 else:
     st.info("Faça o upload do PDF para iniciar.")
+
