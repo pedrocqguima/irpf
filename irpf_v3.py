@@ -6,33 +6,41 @@ import streamlit as st
 import pandas as pd
 import pdfplumber
 
-# ===== DICIONÁRIO COMPLETO (GRUPO, CÓDIGO, DESCRIÇÃO) =====
+# ==========================
+# DICIONÁRIO COMPLETO (GRUPO, CÓDIGO, DESCRIÇÃO)
+# ==========================
 CODIGOS_LIST = [
     ("01","01","Prédio residencial"), ("01","02","Prédio comercial"), ("01","03","Galpão"),
     ("01","11","Apartamento"), ("01","12","Casa"), ("01","13","Terreno"),
     ("01","14","Imóvel rural (ver item Imóvel rural)"), ("01","15","Sala ou conjunto"),
     ("01","16","Construção"), ("01","17","Benfeitorias (ver item Benfeitorias)"),
     ("01","18","Loja"), ("01","99","Outros bens imóveis"),
+
     ("02","01","Veículo automotor terrestre: caminhão, automóvel, moto etc."),
     ("02","02","Aeronave"), ("02","03","Embarcação"),
     ("02","04","Bem relacionado à atividade autônoma com o exercício de profissão"),
     ("02","05","Joia, quadro, objeto de arte, de coleção, antiguidade etc."),
     ("02","99","Outros bens móveis"),
+
     ("03","01","Ações (inclusive as listadas em bolsa)"),
     ("03","02","Quotas ou quinhões de capital"),
     ("03","99","Outras participações societárias"),
+
     ("04","01","Depósito em conta poupança"),
     ("04","02","Títulos públicos e privados sujeitos à tributação (Tesouro Direto, CDB, RDB e outros)"),
     ("04","03","Títulos isentos de tributação (LCI, LCA, CRI, CRA, LIG, Debêntures de Infraestrutura e outros)"),
     ("04","04","Ativos negociados em bolsa no Brasil (BDRs, opções e outros – exceto ações e fundos)"),
     ("04","05","Ouro, ativo financeiro"),
     ("04","99","Outras aplicações e investimentos"),
+
     ("05","01","Empréstimos concedidos"), ("05","02","Crédito decorrente de alienação"),
     ("05","99","Outros créditos"),
+
     ("06","01","Depósito em conta-corrente ou conta pagamento"),
     ("06","10","Dinheiro em espécie – moeda nacional"),
     ("06","11","Dinheiro em espécie – moeda estrangeira"),
     ("06","99","Outros depósitos à vista"),
+
     ("07","01","Fundos de Investimentos sujeitos à tributação periódica (come-cotas)"),
     ("07","02","Fundos de Investimento nas Cadeias Produtivas Agroindustriais (Fiagro)"),
     ("07","03","Fundos de Investimento Imobiliário (FII)"),
@@ -43,10 +51,12 @@ CODIGOS_LIST = [
     ("07","08","Fundos de Índice de Renda Fixa – Lei 13.043/14"),
     ("07","09","Demais ETFs"), ("07","10","FIDC"),
     ("07","11","Fundos sem tributação periódica"), ("07","99","Outros fundos"),
+
     ("08","01","Criptoativo Bitcoin (BTC)"),
     ("08","02","Altcoins (ETH, XRP, BCH, LTC etc.)"),
     ("08","03","Stablecoins (USDT, USDC, BRZ, BUSD, DAI, TUSD, GUSD, PAX, PAXG etc.)"),
     ("08","10","NFTs"), ("08","99","Outros criptoativos"),
+
     ("99","01","Licença e concessão especiais"),
     ("99","02","Título de clube e assemelhado"),
     ("99","03","Direito de autor, de inventor e patente"),
@@ -57,6 +67,7 @@ CODIGOS_LIST = [
     ("99","99","Outros bens e direitos"),
 ]
 
+# DICIONÁRIO DE GRUPOS (para exibir na UI)
 GRUPOS_TXT = """**Dicionário de Grupos (Bens e Direitos)**  
 01 – Bens Imóveis  
 02 – Bens Móveis  
@@ -76,24 +87,31 @@ RESSALVA_TXT = (
     "quanto em **S.As. de capital fechado**."
 )
 
-# ===== REGEX & UTIL =====
+# ==========================
+# REGEX & UTIL
+# ==========================
 BRL_NUM = r'(?:\d{1,3}(?:\.\d{3})*,\d{2}|0,00)'
 ITEM_ANCHOR = re.compile(r'^\s*(\d{2})\s+(\d{2})\s+(.*)$', re.MULTILINE)
 
 def brl_to_float(s: str) -> float:
     s = s.strip().replace('.', '').replace(',', '.')
-    try: return float(s)
-    except Exception: return 0.0
+    try:
+        return float(s)
+    except Exception:
+        return 0.0
 
 def format_brl(value: float) -> str:
     """Formata número como R$ X.XXX,XX (entrada deve ser numérica)."""
-    if value is None or (isinstance(value, float) and pd.isna(value)): 
+    if value is None:
         return ""
-    # garante conversão caso venha string por engano
     try:
-        v = float(str(value).replace(".", "").replace(",", "."))
+        v = float(value)
     except Exception:
-        v = 0.0
+        # tenta limpar caso venha string tipo '1.234,56'
+        try:
+            v = float(str(value).replace(".", "").replace(",", "."))
+        except Exception:
+            v = 0.0
     return f"R$ {v:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
 
 def load_codigos_embutidos() -> pd.DataFrame:
@@ -104,17 +122,25 @@ def load_codigos_embutidos() -> pd.DataFrame:
 
 def read_pdf_text(uploaded_file) -> str:
     with pdfplumber.open(uploaded_file) as pdf:
-        return "\n".join(page.extract_text() or "" for page in pdf.pages)
+        pages = [page.extract_text() or "" for page in pdf.pages]
+    return "\n".join(pages)
 
 def detect_year_headers(text: str) -> Tuple[str, str]:
     years = sorted(set(re.findall(r'31/12/(\d{4})', text)))
-    return (years[-2], years[-1]) if len(years) >= 2 else ('ano_1','ano_2')
+    if len(years) >= 2:
+        return years[-2], years[-1]
+    return 'ano_1', 'ano_2'
 
 def extract_section(full_text: str, start_marker: str, stop_markers: List[str]) -> str:
     start_idx = full_text.find(start_marker)
-    if start_idx == -1: return ""
+    if start_idx == -1:
+        return ""
     tail = full_text[start_idx:]
-    stop_idx = min([tail.find(m) for m in stop_markers if tail.find(m) != -1] or [len(tail)])
+    stop_idx = len(tail)
+    for m in stop_markers:
+        j = tail.find(m)
+        if j != -1:
+            stop_idx = min(stop_idx, j)
     return tail[:stop_idx]
 
 def split_items(section_text: str):
@@ -128,7 +154,8 @@ def split_items(section_text: str):
     return items
 
 def extract_values_from_chunk(chunk: str):
-    first_line = (chunk.splitlines() or [chunk])[0]
+    lines = chunk.splitlines()
+    first_line = lines[0] if lines else chunk
     money_in_line = re.findall(BRL_NUM, first_line)
     if len(money_in_line) >= 2:
         return brl_to_float(money_in_line[-2]), brl_to_float(money_in_line[-1])
@@ -141,7 +168,12 @@ def parse_bens_direitos_from_text(full_text: str) -> Tuple[pd.DataFrame, Tuple[s
     section = extract_section(
         full_text,
         start_marker="DECLARAÇÃO DE BENS E DIREITOS",
-        stop_markers=["DÍVIDAS E ÔNUS","RENDIMENTOS","EVOLUÇÃO PATRIMONIAL","OUTRAS INFORMAÇÕES"]
+        stop_markers=[
+            "DÍVIDAS E ÔNUS",
+            "RENDIMENTOS",
+            "EVOLUÇÃO PATRIMONIAL",
+            "OUTRAS INFORMAÇÕES"
+        ]
     )
     if not section.strip():
         raise RuntimeError("Seção 'DECLARAÇÃO DE BENS E DIREITOS' não encontrada no PDF.")
@@ -149,11 +181,17 @@ def parse_bens_direitos_from_text(full_text: str) -> Tuple[pd.DataFrame, Tuple[s
     recs = []
     for grupo, codigo, chunk in split_items(section):
         v1, v2 = extract_values_from_chunk(chunk)
-        if v1 is None or v2 is None: v1, v2 = 0.0, 0.0
-        recs.append({"grupo":str(grupo).zfill(2),"codigo":str(codigo).zfill(2),
-                     f"Base_{ano1}":v1, f"Base_{ano2}":v2})
+        if v1 is None or v2 is None:
+            v1, v2 = 0.0, 0.0
+        recs.append({
+            "grupo": str(grupo).zfill(2),
+            "codigo": str(codigo).zfill(2),
+            f"Base_{ano1}": v1,
+            f"Base_{ano2}": v2
+        })
     df = pd.DataFrame(recs)
-    if df.empty: return df, (ano1, ano2)
+    if df.empty:
+        return df, (ano1, ano2)
     num_cols = [c for c in df.columns if c.startswith("situacao_")]
     df = df.groupby(["grupo","codigo"], as_index=False)[num_cols].sum(numeric_only=True)
     return df, (ano1, ano2)
@@ -172,39 +210,52 @@ def add_total_row(df_num: pd.DataFrame) -> pd.DataFrame:
     """Adiciona linha TOTAL somando colunas numéricas de situação."""
     num_cols = [c for c in df_num.columns if c.startswith("situacao_")]
     total_vals = {c: df_num[c].sum() for c in num_cols}
-    total_row = {"grupo":"", "codigo":"", "descricao":"TOTAL", **total_vals}
+    total_row = {"grupo": "", "codigo": "", "descricao": "TOTAL", **total_vals}
     return pd.concat([df_num, pd.DataFrame([total_row])], ignore_index=True)
 
 def extract_declarant_info(full_text: str) -> Dict[str, Optional[str]]:
     cpf = None
     m = re.search(r'CPF[:\s]*((?:\d{3}\.\d{3}\.\d{3}-\d{2})|\d{11})', full_text, re.I)
-    if m: cpf = m.group(1).strip()
+    if m:
+        cpf = m.group(1).strip()
+
     dob = None
     m = re.search(r'(?:Data de nascimento|Nascimento|Nascido em)[:\s\-]*?(\d{2}/\d{2}/\d{4})', full_text, re.I)
-    if m: dob = m.group(1).strip()
+    if m:
+        dob = m.group(1).strip()
+
     nome = None
     for label in [r'Nome do contribuinte', r'Nome', r'Declarante', r'Contribuinte', r'NOME']:
         m = re.search(rf'{label}\s*[:\-]?\s*([A-ZÀ-Ý][A-Za-zÀ-ÿ0-9\.\- \u00C0-\u017F,/]{{2,120}})', full_text, re.I)
         if m:
             candidate = m.group(1).strip().strip(':')
             if 2 < len(candidate) < 160:
-                nome = candidate; break
+                nome = candidate
+                break
     return {"Nome": nome, "CPF": cpf, "Data de Nascimento": dob}
 
 def make_excel_bytes(df_decl: pd.DataFrame, df_resumo_num: pd.DataFrame) -> bytes:
-    """Gera Excel com valores já formatados como 'R$ ...' e linha TOTAL."""
+    """Gera Excel com valores formatados como 'R$ ...' e linha TOTAL."""
     buf = io.BytesIO()
-    df_out = add_total_row(df_resumo_num.copy())
-    # formata valores em texto BRL
-    for c in [col for col in df_out.columns if col.startswith("situacao_")]:
-        df_out[c] = df_out[c].apply(format_brl)
+
+    # ordem de colunas e linha TOTAL
+    num_cols = [c for c in df_resumo_num.columns if c.startswith("situacao_")]
+    ordered_cols = ["grupo", "codigo", "descricao"] + num_cols
+    df_out = df_resumo_num[ordered_cols].copy()
+
+    # formata BRL como string nas colunas de valor
+    for col in num_cols:
+        df_out[col] = df_out[col].apply(format_brl)
+
     with pd.ExcelWriter(buf, engine="openpyxl") as xw:
         df_decl.to_excel(xw, index=False, sheet_name="declarante")
         df_out.to_excel(xw, index=False, sheet_name="resumo_por_codigo")
     buf.seek(0)
     return buf.read()
 
-# ===== UI STREAMLIT =====
+# ==========================
+# UI STREAMLIT
+# ==========================
 st.set_page_config(page_title="IRPF • Bens e Direitos (Resumo por Código)", page_icon="📄", layout="wide")
 st.title("📄 IRPF • Bens e Direitos → Resumo por (Grupo, Código)")
 st.caption("Envie o PDF da declaração. O dicionário de códigos já está embutido no app.")
@@ -220,9 +271,11 @@ if uploaded is not None:
         with st.spinner("Lendo PDF..."):
             full_text = read_pdf_text(uploaded)
 
+        # Declarante
         info = extract_declarant_info(full_text)
         df_decl = pd.DataFrame([info])
 
+        # Bens e Direitos
         with st.spinner("Extraindo e somando por (Grupo, Código)..."):
             df_vals, (ano1, ano2) = parse_bens_direitos_from_text(full_text)
 
@@ -233,20 +286,31 @@ if uploaded is not None:
             st.warning("Não foram encontrados itens na seção 'Declaração de Bens e Direitos'.")
         else:
             df_cod = load_codigos_embutidos()
-            df_temp = anexar_descricao(df_vals, df_cod)
-            df_resumo_num = resumir_por_grupo_codigo(df_temp)  # NUMÉRICO
+            df_tmp = anexar_descricao(df_vals, df_cod)
+
+            # NUMÉRICO para cálculos/Excel
+            df_resumo_num = resumir_por_grupo_codigo(df_tmp)
+
+            # ordem fixa de colunas de valor
+            num_cols = [c for c in df_resumo_num.columns if c.startswith("situacao_")]
+            ordered_cols = ["grupo", "codigo", "descricao"] + num_cols
+            df_resumo_num = df_resumo_num[ordered_cols]
+
+            # adiciona TOTAL (numérico)
             df_resumo_num = add_total_row(df_resumo_num)
 
-            # versão apenas para exibir (strings BRL)
+            # DISPLAY: formata BRL nas colunas de valor
             df_resumo_display = df_resumo_num.copy()
-            for c in [col for col in df_resumo_display.columns if col.startswith("situacao_")]:
-                df_resumo_display[c] = df_resumo_display[c].apply(format_brl)
+            for col in num_cols:
+                df_resumo_display[col] = df_resumo_display[col].apply(format_brl)
 
             st.success(f"Anos detectados: **{ano1}** e **{ano2}**")
             st.subheader("Resumo por (Grupo, Código)")
             st.dataframe(df_resumo_display, use_container_width=True)
 
-            xlsx_bytes = make_excel_bytes(df_decl, df_resumo_num)  # passa o NUMÉRICO
+
+            # Download (usa o NUMÉRICO; formata BRL dentro do Excel também)
+            xlsx_bytes = make_excel_bytes(df_decl, df_resumo_num)
             st.download_button(
                 label="⬇️ Baixar Excel (declarante + resumo_por_codigo)",
                 data=xlsx_bytes,
@@ -258,4 +322,3 @@ if uploaded is not None:
         st.error(f"Erro ao processar o PDF: {e}")
 else:
     st.info("Faça o upload do PDF para iniciar.")
-
