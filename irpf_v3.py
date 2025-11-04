@@ -151,7 +151,7 @@ def parse_bens_direitos_from_text(full_text: str) -> Tuple[pd.DataFrame, Tuple[s
         v1, v2 = extract_values_from_chunk(chunk)
         if v1 is None or v2 is None: v1, v2 = 0.0, 0.0
         recs.append({"grupo":str(grupo).zfill(2),"codigo":str(codigo).zfill(2),
-                     f"situacao_{ano1}":v1, f"situacao_{ano2}":v2})
+                     f"Base_{ano1}":v1, f"Base_{ano2}":v2})
     df = pd.DataFrame(recs)
     if df.empty: return df, (ano1, ano2)
     num_cols = [c for c in df.columns if c.startswith("situacao_")]
@@ -239,7 +239,7 @@ if uploaded is not None:
 
             # versão apenas para exibir (strings BRL)
             df_resumo_display = df_resumo_num.copy()
-            for c in [col for col in df_resumo_display.columns if c.startswith("situacao_")]:
+            for c in [col for col in df_resumo_display.columns if col.startswith("situacao_")]:
                 df_resumo_display[c] = df_resumo_display[c].apply(format_brl)
 
             st.success(f"Anos detectados: **{ano1}** e **{ano2}**")
