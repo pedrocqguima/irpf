@@ -82,7 +82,7 @@ GRUPOS_TXT = """**Dicionário de Grupos (Bens e Direitos)**
 
 RESSALVA_TXT = (
     "🔎 **Ressalva importante:** As **ações negociadas em bolsa** devem ser declaradas como "
-    "**Participações Societárias** no IRPF. Assim, o totalizador de “Participações Societárias” "
+    "**Participações Societárias** no IRPF. Assim, o totalizador de “Ações (inclusive as listadas em bolsa)” "
     "no quadro resumo contempla tanto as participações acionárias em **S.As. de capital aberto** "
     "quanto em **S.As. de capital fechado**."
 )
