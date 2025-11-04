@@ -281,6 +281,15 @@ if uploaded is not None:
             for col in num_cols:
                 df_resumo_display[col] = df_resumo_display[col].apply(format_brl)
 
+    # 🔹 renomeia os cabeçalhos para exibição
+            df_resumo_display = df_resumo_display.rename(columns={
+    "grupo": "Grupo",
+    "codigo": "Código",
+    "descricao": "Descrição",
+    f"Base_{ano1}": f"Situação em 31/12/{ano1}",
+    f"Base_{ano2}": f"Situação em 31/12/{ano2}"
+})
+
             st.success(f"Anos detectados: **{ano1}** e **{ano2}**")
             st.subheader("Resumo por (Grupo, Código)")
             st.dataframe(df_resumo_display, use_container_width=True)
